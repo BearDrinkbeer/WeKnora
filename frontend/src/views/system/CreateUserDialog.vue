@@ -125,7 +125,9 @@ import {
   type CreateUserReveal,
 } from './createUserDialogState'
 
-const props = defineProps<{ visible: boolean; active: boolean }>()
+const props = withDefaults(defineProps<{ visible: boolean; active?: boolean }>(), {
+  active: true,
+})
 const emit = defineEmits<{
   'update:visible': [boolean]
   announced: [string]

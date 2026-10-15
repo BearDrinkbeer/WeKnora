@@ -27,7 +27,7 @@
       </t-button>
       <!-- CreateUserDialog anchors its popup to the default slot, so the
            trigger button lives inside it (same wiring as SystemSettings). -->
-      <CreateUserDialog v-model:visible="createUserVisible" @announced="onAnnounced">
+      <CreateUserDialog v-model:visible="createUserVisible" :active="true" @announced="onAnnounced">
         <t-button theme="primary">
           <template #icon><t-icon name="user-add" /></template>
           {{ t('userManagement.local.createUser') }}
