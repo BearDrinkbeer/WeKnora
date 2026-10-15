@@ -15,7 +15,7 @@ func TestModelCatalogRequiresSystemAdmin(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	g := &rbacGuards{cfg: &config.Config{}}
 	r := gin.New()
-	RegisterSystemAdminRoutes(r.Group("/api/v1"), &handler.SystemHandler{}, nil, g)
+	RegisterSystemAdminRoutes(r.Group("/api/v1"), &handler.SystemHandler{}, nil, nil, g)
 	for _, tc := range []struct{ method, path string }{
 		{http.MethodGet, "/api/v1/system/admin/model-catalog"},
 		{http.MethodPost, "/api/v1/system/admin/model-catalog/preview"},

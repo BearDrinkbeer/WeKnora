@@ -1425,7 +1425,7 @@ onMounted(async () => {
   margin: 14px 0 0;
   padding: 8px 12px;
   border-radius: var(--app-radius-md);
-  background: var(--td-warning-color-light, var(--td-bg-color-container-hover));
+  background: var(--td-warning-color-light);
   color: var(--td-text-color-primary);
   font-size: 12.5px;
   line-height: 1.5;
