@@ -299,7 +299,6 @@ func RegisterSystemAdminRoutes(
 		adminRoutes.POST("/promote", handler.PromoteUserToSystemAdmin)
 		adminRoutes.POST("/revoke", handler.RevokeSystemAdmin)
 		adminRoutes.GET("/list", handler.ListSystemAdmins)
-		adminRoutes.GET("/users", handler.ListUsers)
 		adminRoutes.POST("/users/status", handler.SetUserStatus)
 		adminRoutes.POST("/users/reset-password", handler.ResetUserPassword)
 		adminRoutes.POST("/users/create", handler.CreateSystemUser)
@@ -327,6 +326,8 @@ func RegisterSystemAdminRoutes(
 			adminRoutes.GET("/auth/ldap", userManagementHandler.GetLDAPProvider)
 			adminRoutes.PUT("/auth/ldap", userManagementHandler.UpdateLDAPProvider)
 			adminRoutes.POST("/auth/ldap/test", userManagementHandler.TestLDAPProvider)
+		} else {
+			adminRoutes.GET("/users", handler.ListUsers)
 		}
 
 		// P1: platform-wide system settings (DB-backed runtime tunables).
