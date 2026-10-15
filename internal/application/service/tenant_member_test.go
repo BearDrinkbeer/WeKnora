@@ -650,3 +650,19 @@ func TestTenantRole_HasPermission(t *testing.T) {
 func (r *cleanupUserRepo) SetUserActive(context.Context, string, string, bool) (*types.User, error) {
 	panic("unexpected SetUserActive call")
 }
+
+func (r *cleanupUserRepo) ListManagedUsers(context.Context, string, int, int) ([]*types.User, int64, error) {
+	return nil, 0, nil
+}
+
+func (r *cleanupUserRepo) ManagedUserStats(context.Context) (*types.ManagedUserStats, error) {
+	return nil, nil
+}
+
+func (r *cleanupUserRepo) SetManagedUserActive(context.Context, string, bool) (*types.User, error) {
+	return nil, nil
+}
+
+func (r *cleanupUserRepo) SoftDeleteManagedUser(context.Context, string) (*types.User, error) {
+	return nil, nil
+}
