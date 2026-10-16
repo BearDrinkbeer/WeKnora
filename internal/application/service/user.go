@@ -357,12 +357,7 @@ func (s *userService) loginViaLDAPProvisioning(
 		return nil, nil
 	}
 	ldapCfg := s.authProviderSvc.ResolveLDAPConfig(ctx)
-	if ldapCfg == nil {
-		logger.Infof(ctx, "[auth] LDAP is not configured or disabled; skipping LDAP provisioning")
-		return nil, nil
-	}
-	if !ldapCfg.AutoCreateUser {
-		logger.Warnf(ctx, "[auth] LDAP is active but auto_create_user is disabled; account %s not found locally and will not be auto-provisioned", secutils.SanitizeForLog(req.Email))
+	if ldapCfg == nil || !ldapCfg.AutoCreateUser {
 		return nil, nil
 	}
 

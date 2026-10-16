@@ -196,15 +196,6 @@ func SearchUser(conn *ldap.Conn, cfg Config, identifier string) (*Entry, error) 
 		}
 	}
 	if res == nil || len(res.Entries) == 0 {
-		// When an operator configures an account-only filter like (sAMAccountName=%s)
-		// but the user provides their corporate email (e.g. sunhu@domain.com),
-		// retry search with the username prefix before '@'.
-		if strings.Contains(identifier, "@") {
-			parts := strings.SplitN(identifier, "@", 2)
-			if parts[0] != "" {
-				return SearchUser(conn, cfg, parts[0])
-			}
-		}
 		return nil, ErrNoUserMatch
 	}
 	if len(res.Entries) > 1 {
