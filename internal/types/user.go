@@ -169,9 +169,9 @@ type AuthToken struct {
 	User *User `json:"user,omitempty" gorm:"foreignKey:UserID"`
 }
 
-// LoginRequest represents a login request
+// LoginRequest represents a login request (supports username or email)
 type LoginRequest struct {
-	Email    string `json:"email"    binding:"required,email"`
+	Email    string `json:"email"    binding:"required"`
 	Password string `json:"password" binding:"required,min=6"`
 }
 

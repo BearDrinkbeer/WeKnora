@@ -163,7 +163,7 @@ func SearchUser(conn *ldap.Conn, cfg Config, identifier string) (*Entry, error) 
 	template := cfg.filterTemplate()
 	var filter string
 	if strings.Contains(template, "%s") {
-		filter = fmt.Sprintf(template, escaped)
+		filter = strings.ReplaceAll(template, "%s", escaped)
 	} else {
 		filter = template
 	}

@@ -264,7 +264,15 @@ func loginRejected() *types.LoginResponse {
 func (s *userService) Login(ctx context.Context, req *types.LoginRequest) (*types.LoginResponse, error) {
 	logger.Info(ctx, "Start user login")
 
-	user, err := s.userRepo.GetUserByEmail(ctx, req.Email)
+	identifier := strings.TrimSpace(req.Email)
+	var user *types.User
+	var err error
+	if strings.Contains(identifier, "@") {
+		user, err = s.userRepo.GetUserByEmail(ctx, identifier)
+	}
+	if user == nil {
+		user, err = s.userRepo.GetUserByUsername(ctx, identifier)
+	}
 	if err != nil || user == nil {
 		// No local account. Give the directory a chance to authenticate the
 		// identifier and, if it does and JIT provisioning is on, create the
@@ -272,7 +280,7 @@ func (s *userService) Login(ctx context.Context, req *types.LoginRequest) (*type
 		if provisioned, ldapErr := s.loginViaLDAPProvisioning(ctx, req); provisioned != nil || ldapErr != nil {
 			return provisioned, ldapErr
 		}
-		logger.Warn(ctx, "User not found for email")
+		logger.Warn(ctx, "User not found for identifier")
 		return loginRejected(), nil
 	}
 
@@ -289,6 +297,10 @@ func (s *userService) Login(ctx context.Context, req *types.LoginRequest) (*type
 		// has no user-known local password of its own.
 		if !user.HasUsableLocalPassword() && s.authProviderSvc != nil {
 			info, ldapErr := s.authProviderSvc.AuthenticateLDAP(ctx, req.Email, req.Password)
+			if (info == nil || ldapErr != nil) && user.Email != "" && user.Email != req.Email {
+				// Retry with the account's bound email if user logged in by username
+				info, ldapErr = s.authProviderSvc.AuthenticateLDAP(ctx, user.Email, req.Password)
+			}
 			if ldapErr != nil {
 				logger.Warnf(ctx, "LDAP authentication error: %v", ldapErr)
 			}
