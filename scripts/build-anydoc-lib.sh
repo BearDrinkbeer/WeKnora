@@ -53,6 +53,50 @@ fi
 # even when the upstream anydoc version stays the same.
 anydoc_patch_id="$anydoc_version-zip9-v1"
 
+# strip_llvm_bitcode removes the LLVM bitcode sections Go 1.26 refuses to link.
+# Members that are not object files are copied through unchanged.
+strip_llvm_bitcode() {
+  local archive=$1
+  local tool=""
+  if command -v objcopy >/dev/null 2>&1; then
+    tool=objcopy
+  elif command -v llvm-objcopy >/dev/null 2>&1; then
+    tool=llvm-objcopy
+  else
+    echo "error: objcopy is required to strip LLVM bitcode from $archive" >&2
+    echo "Go 1.26 rejects .llvmbc and .llvmcmd sections in #cgo archives." >&2
+    exit 1
+  fi
+
+  local extracted rebuilt member
+  local -a members=()
+  extracted=$(mktemp -d)
+  rebuilt=$(mktemp -d)
+  (
+    cd "$extracted"
+    ar x "$archive"
+  )
+  for member in "$extracted"/*; do
+    [ -f "$member" ] || continue
+    if ! "$tool" \
+      --remove-section=.llvmbc \
+      --remove-section=.llvmcmd \
+      --remove-section=.llvm.lto \
+      "$member" "$rebuilt/$(basename "$member")"; then
+      cp "$member" "$rebuilt/$(basename "$member")"
+    fi
+    members+=("$rebuilt/$(basename "$member")")
+  done
+  if [ "${#members[@]}" -eq 0 ]; then
+    echo "error: $archive contained no archive members" >&2
+    rm -rf "$extracted" "$rebuilt"
+    exit 1
+  fi
+  rm -f "$archive"
+  ar rcs "$archive" "${members[@]}"
+  rm -rf "$extracted" "$rebuilt"
+}
+
 # Copy the pinned version, expose the official serializer, and upgrade zip to
 # the fixed major version (upstream anydoc 0.2.4 still requires zip ^8.6.0).
 prepare_patched_anydoc() {
@@ -136,6 +180,15 @@ cargo build --release --locked --manifest-path "$crate_dir/Cargo.toml" --target 
 dest="$crate_dir/lib/$lib_dir"
 mkdir -p "$dest"
 cp "$crate_dir/target/$target/release/$lib_name" "$dest/$lib_name"
+
+# Go 1.26 scans every archive named by #cgo LDFLAGS and rejects LLVM bitcode
+# sections (src/cmd/go/internal/work/security.go). Rust's release profile uses
+# thin LTO, which leaves .llvmbc / .llvmcmd beside the machine code. The native
+# objects still link; only those sections have to go.
+case "$target" in
+  *windows-msvc) ;;
+  *) strip_llvm_bitcode "$dest/$lib_name" ;;
+esac
 
 echo "Wrote $dest/$lib_name"
 echo "Build WeKnora with the archive: go build -tags anydoc ./cmd/server"
