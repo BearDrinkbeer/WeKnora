@@ -37,7 +37,9 @@ env:
 jobs:
   verify:
     name: Python tests and Go client tests
-    runs-on: ubuntu-latest
+    # ubuntu-latest is 26.04, and actions/setup-python has no CPython 3.10.18
+    # build for that image. 24.04 still provides the pinned interpreter.
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
