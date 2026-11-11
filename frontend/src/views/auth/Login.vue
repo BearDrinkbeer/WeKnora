@@ -170,8 +170,8 @@
             {{ inviteLookupError }}
           </div>
           <div class="form-header">
+            <img class="brand-logo" src="@/assets/img/cowin-logo.png" alt="COWIN" />
             <h2 class="form-title">{{ $t('auth.login') }}</h2>
-            <p class="form-welcome">{{ $t('auth.subtitle') }}</p>
             <p v-if="registrationEnabled" class="form-hint">{{ $t('auth.loginHint') }}</p>
           </div>
 
@@ -217,22 +217,6 @@
             <div v-if="ldapEnabled" class="ldap-hint">
               {{ $t('auth.ldapLoginHint') }}
             </div>
-
-            <!-- Features list -->
-            <div class="login-features">
-              <div class="feature-item">
-                <span class="feature-icon">✓</span>
-                <span class="feature-text">{{ $t('platform.multimodalParsing') }}</span>
-              </div>
-              <div class="feature-item">
-                <span class="feature-icon">✓</span>
-                <span class="feature-text">{{ $t('platform.hybridSearchEngine') }}</span>
-              </div>
-              <div class="feature-item">
-                <span class="feature-icon">✓</span>
-                <span class="feature-text">{{ $t('platform.ragQandA') }}</span>
-              </div>
-            </div>
           </div>
         </div>
 
@@ -257,8 +241,8 @@
             {{ inviteLookupError }}
           </div>
           <div class="form-header">
+            <img class="brand-logo" src="@/assets/img/cowin-logo.png" alt="COWIN" />
             <h2 class="form-title">{{ $t('auth.createAccount') }}</h2>
-            <p class="form-subtitle">{{ $t('auth.registerSubtitle') }}</p>
           </div>
 
           <div class="form-content">
@@ -295,22 +279,6 @@
               <a href="#" @click.prevent="toggleMode" class="link-button">
                 {{ $t('auth.backToLogin') }}
               </a>
-            </div>
-
-            <!-- Features list for register -->
-            <div class="login-features">
-              <div class="feature-item">
-                <span class="feature-icon">✓</span>
-                <span class="feature-text">{{ $t('platform.independentTenant') }}</span>
-              </div>
-              <div class="feature-item">
-                <span class="feature-icon">✓</span>
-                <span class="feature-text">{{ $t('platform.fullApiAccess') }}</span>
-              </div>
-              <div class="feature-item">
-                <span class="feature-icon">✓</span>
-                <span class="feature-text">{{ $t('platform.knowledgeBaseManagement') }}</span>
-              </div>
             </div>
           </div>
         </div>
@@ -1361,6 +1329,13 @@ onMounted(async () => {
 .form-header {
   text-align: center;
   margin-bottom: 32px;
+}
+
+.brand-logo {
+  display: block;
+  height: 52px;
+  width: auto;
+  margin: 0 auto 16px;
 }
 
 .form-title {
