@@ -109,7 +109,7 @@ type ImageInfo struct {
 	Caption string `json:"caption"`
 	// 图片OCR文本
 	OCRText string `json:"ocr_text"`
-	// Attrs 是描述轮给出的图片属性观察结果（取值见 ImageAttrs / ImageAttrRegistry）。
+	// Attrs 保存描述轮的图片观察结果（见 ImageAttrs / ImageAttrRegistry）和解析器 source.* 来源位置。
 	// 只记录模型确实回答了的属性：观察失败或取值非法的属性不会写入默认值，而是直接缺键，
 	// 因此读取方必须用 ImageAttrs.Observed 区分「未观察到」与「观察到了负值」。
 	// 该字段以 JSON 存储在 chunks.image_info 中，无需迁移；属性观察能力上线前写入的
@@ -137,9 +137,9 @@ type Chunk struct {
 	// Tenant ID, used for multi-tenant isolation
 	TenantID uint64 `json:"tenant_id"`
 	// ID of the parent knowledge, associated with the Knowledge model
-	KnowledgeID string `json:"knowledge_id"`
+	KnowledgeID string `json:"knowledge_id" extensions:"x-agent"`
 	// ID of the knowledge base, for quick location
-	KnowledgeBaseID string `json:"knowledge_base_id"`
+	KnowledgeBaseID string `json:"knowledge_base_id" extensions:"x-agent"`
 	// Optional tag ID for categorization within a knowledge base (used for FAQ)
 	TagID string `json:"tag_id"                   gorm:"type:varchar(36);index"`
 	// Actual text content of the chunk
@@ -148,10 +148,10 @@ type Chunk struct {
 	// backfilled from Content on the first manual edit.
 	SourceContent string `json:"-"`
 	// ContentRevision is incremented for every user edit or rollback.
-	ContentRevision int `json:"content_revision" gorm:"not null;default:0"`
+	ContentRevision int `json:"content_revision" gorm:"not null;default:0" extensions:"x-agent"`
 	// IndexStatus reports whether the current content is reflected in the
 	// retrieval stores: ready | processing | failed.
-	IndexStatus string `json:"index_status" gorm:"type:varchar(16);not null;default:'ready'"`
+	IndexStatus string `json:"index_status" gorm:"type:varchar(16);not null;default:'ready'" extensions:"x-agent"`
 	// LastEditorID records the actor that produced the current revision.
 	LastEditorID string `json:"last_editor_id" gorm:"type:varchar(64);not null;default:''"`
 	// Index position of the chunk in the original document
@@ -207,13 +207,13 @@ type ChunkRevision struct {
 	TenantID        uint64    `json:"tenant_id" gorm:"index"`
 	KnowledgeBaseID string    `json:"knowledge_base_id" gorm:"type:varchar(36);index"`
 	KnowledgeID     string    `json:"knowledge_id" gorm:"type:varchar(36);index"`
-	ChunkID         string    `json:"chunk_id" gorm:"type:varchar(36);uniqueIndex:idx_chunk_revision"`
-	Revision        int       `json:"revision" gorm:"uniqueIndex:idx_chunk_revision"`
-	Content         string    `json:"content" gorm:"type:text"`
-	IsEnabled       bool      `json:"is_enabled"`
+	ChunkID         string    `json:"chunk_id" gorm:"type:varchar(36);uniqueIndex:idx_chunk_revision" extensions:"x-agent"`
+	Revision        int       `json:"revision" gorm:"uniqueIndex:idx_chunk_revision" extensions:"x-agent"`
+	Content         string    `json:"content" gorm:"type:text" extensions:"x-agent"`
+	IsEnabled       bool      `json:"is_enabled" extensions:"x-agent"`
 	EditorID        string    `json:"editor_id" gorm:"type:varchar(64)"`
-	EditSource      string    `json:"edit_source" gorm:"type:varchar(16)"`
-	EditedAt        time.Time `json:"edited_at"`
+	EditSource      string    `json:"edit_source" gorm:"type:varchar(16)" extensions:"x-agent"`
+	EditedAt        time.Time `json:"edited_at" extensions:"x-agent"`
 	CreatedAt       time.Time `json:"created_at"`
 }
 

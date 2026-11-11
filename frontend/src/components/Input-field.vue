@@ -12,13 +12,17 @@ import BrowserIcon from '@/components/icons/BrowserIcon.vue';
 import { useMenuStore } from '@/stores/menu';
 import { listKnowledgeBases, searchKnowledge, batchQueryKnowledge, listKnowledgeTags } from '@/api/knowledge-base';
 import { listMCPServices, type MCPService } from '@/api/mcp-service';
-import { stopSession } from '@/api/chat';
+import { stopSession, transcribeVoice } from '@/api/chat';
 import type { SteerQueueItem } from '@/api/chat/steer';
 import { chatSubmitShortcut } from '@/utils/chatSubmitShortcut';
+import { loadPreference, savePreference, safeRemoveItem, userKey } from '@/composables/preferenceStorage';
 import { useOrganizationStore } from '@/stores/organization';
 import KnowledgeBaseSelector from './KnowledgeBaseSelector.vue';
 import MentionSelector from './MentionSelector.vue';
+import { useAuthStore } from '@/stores/auth';
+import type { BrowserKnowledgeBase } from '@/utils/mentionFileBrowser';
 import AgentSelector from './AgentSelector.vue';
+import HostApprovalModeSelect from './HostApprovalModeSelect.vue';
 import { getCaretCoordinates } from '@/utils/caret';
 import { getRootZoom, rectToCssPx, cssViewportSize } from '@/utils/zoom';
 import { type ModelConfig } from '@/api/model';
@@ -56,10 +60,14 @@ import { formatLocalizedList } from '@/utils/format-list';
 import { SKILL_ICON, type MentionItem, type MentionItemType, type MentionRequestItem } from '@/types/mention';
 import { toolboxLocation } from '@/config/toolbox';
 import { supportedLevels, levelLabelKey, levelFromLegacy, clampLevel, type ReasoningLevel } from '@/utils/reasoningEffort';
+import { customAgentStreamMode } from '@/utils/agent-mode';
+import { isVoiceInputSupported, useVoiceInput, type VoiceInputError } from '@/composables/useVoiceInput';
+import { createHoldToTalk, voiceHotkeyLabel } from '@/utils/voiceHotkey';
 
 const route = useRoute();
 const router = useRouter();
 const settingsStore = useSettingsStore();
+const mentionAuth = useAuthStore();
 const browserConnection = useBrowserConnectionStore();
 const uiStore = useUIStore();
 const orgStore = useOrganizationStore();
@@ -474,6 +482,118 @@ const showWebSearchButton = computed(() => {
 });
 const showImageUploadButton = computed(() => isImageUploadEnabledByAgent.value);
 
+// 语音输入：复用智能体的「音频上传 + ASR 模型」配置
+const voiceInputSupported = isVoiceInputSupported();
+const showVoiceButton = computed(() => {
+  if (props.embeddedMode || !voiceInputSupported || !hasAgentConfig.value) return false;
+  const config = currentAgentConfig.value;
+  return config?.audio_upload_enabled === true && !!config?.asr_model_id;
+});
+const voiceHotkeyText = voiceHotkeyLabel();
+// Where the transcript lands: the caret when recording started, else the end.
+let voiceInsertRange: { start: number; end: number } | null = null;
+
+const insertVoiceText = (text: string) => {
+  const current = query.value;
+  const range = voiceInsertRange ?? { start: current.length, end: current.length };
+  const start = Math.min(range.start, current.length);
+  const end = Math.min(Math.max(range.end, start), current.length);
+  const before = current.slice(0, start);
+  const after = current.slice(end);
+  const lead = before && !/\s$/.test(before) && !/^[\u3000-\u303f\uff00-\uffef]/.test(text) ? ' ' : '';
+  const inserted = lead + text;
+  query.value = before + inserted + after;
+  voiceInsertRange = null;
+  nextTick(() => {
+    const textarea = getTextareaEl();
+    if (!textarea) return;
+    textarea.focus({ preventScroll: true });
+    const caret = before.length + inserted.length;
+    textarea.setSelectionRange(caret, caret);
+  });
+};
+
+const voiceErrorMessages: Record<VoiceInputError, string> = {
+  unsupported: 'input.voiceUnsupported',
+  insecure: 'input.voiceInsecureContext',
+  permission: 'input.voicePermissionDenied',
+  device: 'input.voiceDeviceError',
+  decode: 'input.voiceDecodeError',
+  transcribe: 'input.voiceTranscribeFailed',
+  empty: 'input.voiceEmptyResult',
+  releasedEarly: 'input.voiceReleasedEarly',
+};
+
+const voiceInput = useVoiceInput({
+  target: () => showVoiceButton.value
+    ? {
+      agentId: selectedAgentId.value,
+      agentSourceTenantId: settingsStore.selectedAgentSourceTenantId ?? undefined,
+      locale: locale.value,
+    }
+    : null,
+  transcribe: async (wav, target) => {
+    const res = await transcribeVoice(wav, target.agentId, target.agentSourceTenantId, target.locale);
+    return res?.data?.text ?? '';
+  },
+  onText: insertVoiceText,
+  onError: (error, detail) => {
+    if (detail) console.warn('[voice input]', error, detail);
+    const message = t(voiceErrorMessages[error]);
+    if (error === 'empty' || error === 'releasedEarly') MessagePlugin.info(message);
+    else MessagePlugin.warning(message);
+  },
+});
+const voiceState = voiceInput.state;
+const voiceElapsedText = computed(() => {
+  const seconds = Math.floor(voiceInput.elapsedMs.value / 1000);
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+});
+
+const startVoiceInput = () => {
+  if (!showVoiceButton.value || voiceState.value !== 'idle') return;
+  const textarea = getTextareaEl();
+  voiceInsertRange = textarea && document.activeElement === textarea
+    ? { start: textarea.selectionStart, end: textarea.selectionEnd }
+    : null;
+  void voiceInput.start();
+};
+const stopVoiceInput = () => voiceInput.stop();
+
+// The hotkey only targets this input: skip when it is hidden (another chat
+// view owns the page) or when focus sits in some other field or dialog.
+const voiceHotkeyAllowed = () => {
+  if (!showVoiceButton.value || voiceState.value !== 'idle') return false;
+  const textarea = getTextareaEl();
+  if (!textarea?.isConnected || textarea.offsetParent === null) return false;
+  const active = document.activeElement as HTMLElement | null;
+  if (active && active !== textarea && active !== document.body) {
+    if (active.closest('[role="dialog"], .t-dialog, .t-drawer')) return false;
+    if (active.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName)) return false;
+  }
+  return !isComposing.value;
+};
+const voiceHold = createHoldToTalk({
+  enabled: voiceHotkeyAllowed,
+  onStart: startVoiceInput,
+  onStop: stopVoiceInput,
+});
+const onVoiceKeydown = (e: KeyboardEvent) => voiceHold.keydown(e);
+const onVoiceKeyup = (e: KeyboardEvent) => voiceHold.keyup(e);
+const onVoiceWindowBlur = () => voiceHold.release();
+const onVoiceVisibilityChange = () => {
+  if (document.visibilityState === 'hidden') voiceHold.release();
+};
+
+// Press-and-hold on the mic button mirrors the keyboard shortcut.
+const onVoiceButtonPointerDown = (e: PointerEvent) => {
+  if (e.button !== 0) return;
+  e.preventDefault();
+  (e.currentTarget as HTMLElement)?.setPointerCapture?.(e.pointerId);
+  startVoiceInput();
+};
+const onVoiceButtonPointerUp = () => stopVoiceInput();
+
 // 模型选择是否被智能体锁定 - 已移除锁定逻辑，允许用户自由切换模型
 const isModelLockedByAgent = computed(() => {
   return false;
@@ -498,6 +618,7 @@ const mentionGroupCounts = ref<Partial<Record<MentionItemType, number>>>({});
 // 当前 @ 会话可见的 KB ID 集合（含工具兼容性过滤），分页加载文件时复用，
 // 避免 append 请求把不兼容 KB 的文件漏进来。`null` 表示"不受限制"（非智能体场景）
 const mentionAllowedKbIds = ref<Set<string> | null>(null);
+const mentionBrowserKbs = ref<BrowserKnowledgeBase[]>([]);
 const mentionLoading = ref(false);
 const mentionOffset = ref(0);
 const MENTION_PAGE_SIZE = 20;
@@ -543,9 +664,15 @@ const props = defineProps({
     default: false
   },
   // Embedded only: the host owns the model choice (v-model:model-id) so the
-  // main chat's pick is neither read nor overwritten. '' lets the agent
-  // resolve its own model.
+  // main chat's pick is neither read nor overwritten. '' follows
+  // defaultModelId.
   modelId: {
+    type: String,
+    default: ''
+  },
+  // Embedded only: the model used while modelId is empty, normally the open
+  // knowledge base's chat model. Falls back to the first available model.
+  defaultModelId: {
     type: String,
     default: ''
   },
@@ -561,6 +688,10 @@ const props = defineProps({
     default: false
   }
 });
+
+const hostApprovalModeVisible = computed(() =>
+  !props.embeddedMode && !!props.sessionId && deploymentCapabilities.isSupported('settings.sandbox.host'),
+);
 
 const isAgentEnabled = computed(() => settingsStore.isAgentEnabled);
 const isWebSearchEnabled = computed(() => settingsStore.isWebSearchEnabled);
@@ -913,15 +1044,37 @@ const loadWebSearchConfig = async (force = false) => {
   }
 };
 
+// 选中的自定义智能体可能刚在编辑页改过运行模式。对话页回到前台时列表会刷新，
+// 但 isAgentEnabled 只在“选择智能体”那一刻同步过，仍是旧值，请求因而走错管线
+// （#4803）。列表刷新后按智能体当前配置纠正一次。
+const syncSelectedAgentModeFromConfig = () => {
+  if (props.embeddedMode) return;
+  const agent = selectedAgent.value;
+  // 列表尚未加载时 selectedAgent 会回退到快速问答占位对象，不能用它推断模式。
+  if (!agent || agent.id !== selectedAgentId.value) return;
+  const shouldEnable = customAgentStreamMode(selectedAgentId.value, agent.config);
+  if (shouldEnable === null || shouldEnable === settingsStore.isAgentEnabled) return;
+  settingsStore.toggleAgent(shouldEnable);
+};
+
 // 加载智能体列表（我的 + 共享，供选中态与就绪检查用）
 const loadAgents = async (force = false) => {
   try {
     await chatResources.ensureAgents(force);
     ensureSelectedAgentNotDisabled();
+    syncSelectedAgentModeFromConfig();
   } catch (error) {
     console.error('Failed to load agents:', error);
   }
 };
+
+// 会话恢复会按 last_request_state 覆盖 isAgentEnabled，可能把它改回编辑前的旧值；
+// 选中智能体变化时也要重新对齐。挂载后的首次同步由 loadAgents 完成，这里兜住
+// 之后任何一次漂移。
+watch(
+  () => [selectedAgentId.value, currentAgentConfig.value?.agent_mode, settingsStore.isAgentEnabled] as const,
+  () => syncSelectedAgentModeFromConfig(),
+);
 
 // 默认选中的 builtin（builtin-quick-answer）也可能被当前空间管理员停用。
 // 列表加载完后做一次纠偏：若当前选中的是本空间停用的 agent（仅限「我的/builtin」，
@@ -959,33 +1112,24 @@ const enabledAgents = computed(() =>
   agents.value.filter(a => !disabledOwnAgentIds.value.includes(a.id))
 );
 
-// LAST_CHAT_MODEL_KEY scopes the per-user "last selected chat model"
-// to localStorage. The previous implementation wrote this back to the
-// tenant-level KV /tenants/kv/conversation-config — which (a) required
-// Admin+ to mutate, so a Viewer/Contributor switching models in the
-// chat input got a 403, and (b) silently overwrote the tenant default
-// for everyone else. localStorage is per-user-per-browser, which is
-// what "remember my last pick" actually wants.
-const LAST_CHAT_MODEL_KEY = 'weknora_last_chat_model_id'
+// The "last selected chat model" lives in localStorage so it survives
+// reloads without a KV round-trip. localStorage is per-browser, not
+// per-user, so the key is namespaced by the active user id via
+// preferenceStorage — otherwise two accounts sharing a browser inherit
+// each other's pick (logout and tenant-switch never cover session-expiry
+// or crash recovery). The un-namespaced legacy key from before this
+// scoping is removed on write so other readers cannot resurrect it.
+const LAST_CHAT_MODEL_LEGACY_KEY = 'weknora_last_chat_model_id'
 
-const readLastChatModelID = (): string => {
-  try {
-    return localStorage.getItem(LAST_CHAT_MODEL_KEY) || ''
-  } catch {
-    return ''
-  }
-}
+const readLastChatModelID = (): string => loadPreference('last_chat_model') || ''
 
 const writeLastChatModelID = (id: string) => {
-  try {
-    if (id) {
-      localStorage.setItem(LAST_CHAT_MODEL_KEY, id)
-    } else {
-      localStorage.removeItem(LAST_CHAT_MODEL_KEY)
-    }
-  } catch {
-    // localStorage may be disabled in incognito mode; ignore.
+  if (id) {
+    savePreference('last_chat_model', id)
+  } else {
+    safeRemoveItem(userKey('last_chat_model'))
   }
+  safeRemoveItem(LAST_CHAT_MODEL_LEGACY_KEY)
 }
 
 // Initial chat-model selection priority: per-user last pick
@@ -1117,12 +1261,18 @@ const selectedModel = computed(() => {
   return availableModels.value.find(model => model.id === selectedModelId.value);
 });
 
-// What the composer shows and sends. Embedded, a pick that is no longer
-// available falls back to auto instead of failing the run.
+// What the composer shows and sends. Embedded, an empty or no longer
+// available pick follows the default, which is resolved to a concrete model
+// here so the label always names the model that will answer.
 const EMBEDDED_AUTO_MODEL = '__auto__';
+const embeddedPickedModel = computed(() => props.modelId
+  ? availableModels.value.find(model => model.id === props.modelId) : undefined);
+const embeddedDefaultModel = computed(() =>
+  availableModels.value.find(model => model.id === props.defaultModelId) || availableModels.value[0]);
+const followsDefaultModel = computed(() => props.embeddedMode && !embeddedPickedModel.value);
 const composerModel = computed(() => {
   if (!props.embeddedMode) return selectedModel.value;
-  return props.modelId ? availableModels.value.find(model => model.id === props.modelId) : undefined;
+  return embeddedPickedModel.value || embeddedDefaultModel.value;
 });
 const composerModelId = computed(() => {
   if (!props.embeddedMode) return selectedModelId.value;
@@ -1154,8 +1304,7 @@ watch([selectedModel, reasoningLevels, () => settingsStore.reasoningEffortOverri
 // 模型展示名：本空间列表中有则用名称；若为共享智能体且其 model_id 不在本空间列表中则显示“共享智能体配置的模型”
 const selectedModelDisplayName = computed(() => {
   if (composerModel.value) return modelDisplayName(composerModel.value);
-  if (props.embeddedMode) return t('input.modelAuto');
-  if (!selectedModelId.value) return t('input.notConfigured');
+  if (!selectedModelId.value || props.embeddedMode) return t('input.notConfigured');
   const isSharedAgent = !!settingsStore.selectedAgentSourceTenantId;
   const modelFromAgent = agentModelId.value && agentModelId.value === selectedModelId.value;
   if (isSharedAgent && modelFromAgent) return t('input.sharedAgentModelLabel');
@@ -1164,7 +1313,7 @@ const selectedModelDisplayName = computed(() => {
 
 const modelTriggerTooltip = computed(() => {
   if (isModelLockedByAgent.value) return t('input.modelLockedByAgent');
-  if (props.embeddedMode && !composerModel.value) return t('input.modelAutoHint');
+  if (followsDefaultModel.value) return t('input.modelAutoHint');
   return '';
 });
 
@@ -1307,6 +1456,30 @@ const updateModelDropdownPosition = () => {
 let lastMentionQuery = '';
 // 关键词变化时旧请求可能晚于新请求返回；只采纳最新一次加载的结果
 let mentionLoadSeq = 0;
+const mentionBrowserContext = computed(() => ({
+  key: JSON.stringify([mentionAuth.user?.id, mentionAuth.selectedTenantId, mentionAuth.tenant?.id,
+    props.sessionId, selectedAgentId.value, settingsStore.selectedAgentSourceTenantId,
+    agentKBSelectionMode.value, [...agentKnowledgeBases.value].sort(), [...agentAllowedTools.value].sort(),
+    [...agentSupportedFileTypes.value].sort()]),
+  agent_id: settingsStore.selectedAgentSourceTenantId ? selectedAgentId.value || undefined : undefined,
+  agent_source_tenant_id: settingsStore.selectedAgentSourceTenantId || undefined,
+}));
+watch(() => mentionBrowserContext.value.key, () => {
+  showMention.value = false;
+  ++mentionLoadSeq;
+  mentionBrowserKbs.value = [];
+  mentionItems.value = [];
+  mentionLoading.value = false;
+}, { flush: 'sync' });
+watch(showMention, visible => {
+  if (!visible) {
+    ++mentionLoadSeq;
+    if (mentionSearchTimer) clearTimeout(mentionSearchTimer);
+    mentionSearchTimer = null;
+    mentionBrowserKbs.value = [];
+    mentionLoading.value = false;
+  }
+}, { flush: 'sync' });
 const loadMentionItems = async (q: string, resetIndex = true, append = false) => {
   console.log('[Mention] loadMentionItems called with query:', q, 'append:', append);
 
@@ -1330,6 +1503,7 @@ const loadMentionItems = async (q: string, resetIndex = true, append = false) =>
       // 共享智能体：按 agent_id 拉取该智能体配置的知识库范围（后端从共享关系解析空间）
       try {
         const list = await chatResources.ensureAgentKnowledgeBases(agentId, sourceTenantId);
+        if (isStale()) return;
         const orgLabel = sharedAgentOrgName.value || '';
         // 保留 capabilities / indexing_strategy，后面过滤时要用
         availableKbs = list.map((kb: any) => ({
@@ -1350,6 +1524,7 @@ const loadMentionItems = async (q: string, resetIndex = true, append = false) =>
           chunk_count: kb.chunk_count
         }));
       } catch (e) {
+        if (isStale()) return;
         console.error('[Mention] listKnowledgeBases(agent_id) error:', e);
         availableKbs = [];
         sharedAgentKbList.value = [];
@@ -1407,6 +1582,10 @@ const loadMentionItems = async (q: string, resetIndex = true, append = false) =>
       ? new Set(availableKbs.map((kb: any) => String(kb.id)))
       : null;
 
+    if (isStale()) return;
+    const canBrowseFiles = !hasAgentConfig.value || (agentKBSelectionMode.value !== 'none' && toolsConsumeFiles(agentAllowedTools.value));
+    mentionBrowserKbs.value = canBrowseFiles ? availableKbs.filter((kb: any) => !kb.type || kb.type === 'document')
+      .map((kb: any) => ({ id: String(kb.id), name: kb.name, orgName: kb.org_name })) : [];
     const kbs = availableKbs.filter((kb: any) =>
       !q || (kb.name && kb.name.toLowerCase().includes(q.toLowerCase()))
     );
@@ -1430,6 +1609,7 @@ const loadMentionItems = async (q: string, resetIndex = true, append = false) =>
         orgName: kb.org_name || sharedAgentOrgName.value || undefined
       };
     }));
+    if (isStale()) return;
     nextGroupCounts.kb = kbItems.length;
 
     const tagKeyword = q.trim();
@@ -1453,6 +1633,7 @@ const loadMentionItems = async (q: string, resetIndex = true, append = false) =>
       console.error('[Mention] listKnowledgeTags error:', e);
       tagItems = [];
     }
+    if (isStale()) return;
 
     const mcpMode = agentMCPSelectionMode.value;
     if (mcpMode !== 'none') {
@@ -1468,6 +1649,7 @@ const loadMentionItems = async (q: string, resetIndex = true, append = false) =>
       // workspace, where they are actually installed. Lite agents store no
       // sandbox config id; their skills live on the host target.
       await deploymentCapabilities.ensureLoaded();
+      if (isStale()) return;
       await editorResources.ensureSkills(
         mentionSkillTargetId(
           hostSkillsOnly(
@@ -1478,6 +1660,7 @@ const loadMentionItems = async (q: string, resetIndex = true, append = false) =>
         ),
         currentAgentScope.value,
       );
+      if (isStale()) return;
       skillItems = editorResources.skills
         .filter(skill => isSkillAllowedByAgent(skill.name))
         .map(skill => ({
@@ -1497,6 +1680,7 @@ const loadMentionItems = async (q: string, resetIndex = true, append = false) =>
   }
 
   // Fetch Files from API
+  if (isStale()) return;
   // 仅当满足以下两点才加载文件：
   //   1. 智能体确实会用到知识库（kb_selection_mode !== 'none'）；
   //   2. 智能体启用的工具里至少有一个能消费 @ 的文件 ID
@@ -1819,6 +2003,7 @@ const triggerMention = () => {
 };
 
 const onMentionSelect = (item: any) => {
+  if (!showMention.value) return;
   if (item.type === 'kb') {
     settingsStore.addKnowledgeBase(item.id);
   } else if (item.type === 'file') {
@@ -1950,6 +2135,12 @@ onMounted(() => {
     return;
   }
 
+  // Capture phase so Option+Space is cancelled before the textarea types U+00A0.
+  window.addEventListener('keydown', onVoiceKeydown, true);
+  window.addEventListener('keyup', onVoiceKeyup, true);
+  window.addEventListener('blur', onVoiceWindowBlur);
+  document.addEventListener('visibilitychange', onVoiceVisibilityChange);
+
   browserConnection.watchStatus();
 
   // 并行拉取；若 platform 已预取且缓存未过期则直接复用
@@ -2023,6 +2214,10 @@ onBeforeUnmount(() => {
 });
 
 onUnmounted(() => {
+  window.removeEventListener('keydown', onVoiceKeydown, true);
+  window.removeEventListener('keyup', onVoiceKeyup, true);
+  window.removeEventListener('blur', onVoiceWindowBlur);
+  document.removeEventListener('visibilitychange', onVoiceVisibilityChange);
   if (!props.embeddedMode) browserConnection.unwatchStatus();
   window.removeEventListener(CHAT_FILE_DROP_EVENT, handleChatFileDrop as EventListener);
   document.removeEventListener('click', closeAgentModeSelector);
@@ -2734,13 +2929,18 @@ const handleStop = async () => {
 }
 
 onBeforeRouteUpdate((to, from, next) => {
-  clearvalue()
-  clearPendingUploads()
+  // The route belongs to the page behind an embedded assistant. Its draft
+  // and uploads belong to the assistant session, which the host manages.
+  if (!props.embeddedMode) {
+    clearvalue()
+    clearPendingUploads()
+  }
   next()
 })
 
 defineExpose({
   focusInput,
+  getComposerModelId: () => composerModelId.value,
   triggerSend(text: string, options: SendMessageOptions = {}) {
     if (!text.trim()) return;
     query.value = text;
@@ -2856,6 +3056,8 @@ defineExpose({
             :currentAgentId="selectedAgentId" :agents="enabledAgents" :all-models="allModels"
             @close="closeAgentModeSelector" @select="handleSelectAgent" @not-ready="handleAgentNotReady" />
 
+          <HostApprovalModeSelect v-if="hostApprovalModeVisible && sessionId" :session-id="sessionId" />
+
           <t-tooltip v-if="settingsStore.isAgentStreamMode" placement="top" theme="light"
             :popupProps="{ overlayClassName: 'input-field-tooltip' }">
             <template #content>
@@ -2948,6 +3150,34 @@ defineExpose({
             </div>
           </t-tooltip>
 
+          <!-- 语音输入按钮（智能体启用音频上传并配置 ASR 模型时显示）：按住说话 -->
+          <t-tooltip v-if="showVoiceButton" placement="top" theme="light"
+            :popupProps="{ overlayClassName: 'input-field-tooltip' }">
+            <template #content>
+              <span v-if="voiceState === 'preparing'">{{ $t('input.voicePreparing') }}</span>
+              <span v-else-if="voiceState === 'recording'">{{ $t('input.voiceRecording') }}</span>
+              <span v-else-if="voiceState === 'transcribing'">{{ $t('input.voiceTranscribing') }}</span>
+              <span v-else>{{ $t('input.voiceTooltip', { shortcut: voiceHotkeyText }) }}</span>
+            </template>
+            <button type="button" class="control-btn voice-input-btn" :class="{
+              'is-preparing': voiceState === 'preparing',
+              'is-recording': voiceState === 'recording',
+              'is-transcribing': voiceState === 'transcribing',
+            }" :aria-label="$t('input.voiceTooltip', { shortcut: voiceHotkeyText })"
+              :aria-pressed="voiceState === 'preparing' || voiceState === 'recording'" :disabled="voiceState === 'transcribing'"
+              @click.stop @pointerdown="onVoiceButtonPointerDown" @pointerup="onVoiceButtonPointerUp"
+              @pointercancel="onVoiceButtonPointerUp" @lostpointercapture="onVoiceButtonPointerUp">
+              <t-loading v-if="voiceState === 'transcribing'" size="14px" />
+              <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="control-icon">
+                <rect x="9" y="3" width="6" height="11" rx="3" />
+                <path d="M5 11a7 7 0 0 0 14 0" />
+                <path d="M12 18v3" />
+              </svg>
+              <span v-if="voiceState === 'recording'" class="voice-elapsed">{{ voiceElapsedText }}</span>
+            </button>
+          </t-tooltip>
+
           <!-- @ 知识库/文件选择按钮 -->
           <t-tooltip placement="top" theme="light" :popupProps="{ overlayClassName: 'input-field-tooltip' }">
             <template #content>
@@ -2974,7 +3204,11 @@ defineExpose({
               </svg>
             </div>
           </t-tooltip>
+          <slot name="background-work" />
           </template>
+          <slot v-if="embeddedMode" name="background-work" />
+
+          <slot name="controls" />
 
           <!-- 模型显示 -->
           <t-tooltip :content="modelTriggerTooltip" :disabled="!modelTriggerTooltip">
@@ -2983,8 +3217,11 @@ defineExpose({
                 <span class="model-selector-name">
                   {{ selectedModelDisplayName }}
                 </span>
+                <span v-if="followsDefaultModel && composerModel" class="model-selector-default">
+                  {{ $t('input.modelAuto') }}
+                </span>
                 <span
-                  v-if="selectedModelContextLabel"
+                  v-else-if="selectedModelContextLabel"
                   class="model-selector-ctx"
                   :class="{ 'is-default': selectedModelContextIsDefault }"
                   :title="selectedModelContextTitle"
@@ -3037,19 +3274,22 @@ defineExpose({
                 </button>
               </div>
               <div class="model-selector-content">
-                <div v-if="embeddedMode" class="model-option" :class="{ selected: !composerModelId }"
+                <div v-if="embeddedMode && embeddedDefaultModel" class="model-option"
+                  :class="{ selected: followsDefaultModel }"
                   :title="$t('input.modelAutoHint')" @click="handleModelChange(EMBEDDED_AUTO_MODEL)">
                   <div class="model-option-left">
                     <div class="model-option-name-wrap">
-                      <span class="model-option-name">{{ $t('input.modelAuto') }}</span>
+                      <span class="model-option-name">{{ $t('input.modelFollowDefault') }}</span>
+                      <span class="model-option-raw-name">{{ modelDisplayName(embeddedDefaultModel) }}</span>
                     </div>
                   </div>
                   <span class="model-option-check">
-                    <t-icon v-if="!composerModelId" name="check" size="14px" />
+                    <t-icon v-if="followsDefaultModel" name="check" size="14px" />
                   </span>
                 </div>
                 <div v-for="model in availableModels" :key="model.id" class="model-option"
-                  :class="{ selected: model.id === composerModelId }" @click="handleModelChange(model.id || '')">
+                  :class="{ selected: !followsDefaultModel && model.id === composerModelId }"
+                  @click="handleModelChange(model.id || '')">
                   <div class="model-option-left">
                     <div class="model-option-name-wrap">
                       <span class="model-option-name">{{ modelDisplayName(model) }}</span>
@@ -3096,7 +3336,10 @@ defineExpose({
       <MentionSelector ref="mentionSelectorRef" :visible="showMention" :style="mentionStyle" :items="mentionItems" :hasMore="mentionHasMore"
         :loading="mentionLoading" :emptyHint="mentionEmptyHint" :query="mentionQuery" :searchable="isMentionTriggeredByButton"
         :group-counts="mentionGroupCounts" v-model:activeIndex="mentionActiveIndex"
-        @update:query="onMentionSearchInput" @close="closeMentionFromPopup"
+        :browser-knowledge-bases="mentionBrowserKbs" :browser-context="mentionBrowserContext"
+        :browser-file-types="agentSupportedFileTypes" :browser-selected-ids="selectedFileIds"
+        :browser-whole-kb-ids="settingsStore.getSelectedKnowledgeBases()" :browser-tag-kb-ids="selectedTags.map(tag => tag.kbId)"
+        @update:query="onMentionSearchInput" @close="closeMentionFromPopup" @focus-input="getTextareaEl()?.focus()"
         @select="onMentionSelect" @loadMore="loadMoreMentionItems" />
     </Teleport>
 
@@ -3435,6 +3678,22 @@ const getImgSrc = (url: string) => {
 
   &.is-embedded {
     justify-content: flex-end;
+    flex-wrap: nowrap;
+
+    .control-left {
+      flex-wrap: nowrap;
+    }
+
+    // Let long model names shrink before the fixed controls wrap or move.
+    .model-display {
+      flex-shrink: 1;
+      min-width: 0;
+    }
+
+    .model-selector-trigger {
+      min-width: 0;
+      max-width: 100%;
+    }
   }
 }
 
@@ -3619,6 +3878,51 @@ const getImgSrc = (url: string) => {
     justify-content: center;
     line-height: 1;
   }
+}
+
+/* Voice input (hold to talk) */
+.voice-input-btn {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 5px;
+  background: transparent;
+  color: var(--td-text-color-secondary);
+  touch-action: none;
+
+  &:hover {
+    background: var(--td-bg-color-secondarycontainer-hover);
+    color: var(--td-text-color-primary);
+  }
+
+  &.is-preparing {
+    background: var(--td-warning-color-light);
+    color: var(--td-warning-color);
+    cursor: progress;
+  }
+
+  &.is-recording {
+    background: var(--td-error-color-light);
+    color: var(--td-error-color);
+    animation: voice-input-pulse 1.2s ease-in-out infinite;
+  }
+
+  &.is-transcribing {
+    cursor: progress;
+  }
+
+  .voice-elapsed {
+    font-size: var(--app-text-2xs);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@keyframes voice-input-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 var(--td-error-color-focus); }
+  50% { box-shadow: 0 0 0 4px var(--td-error-color-focus); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voice-input-btn.is-recording { animation: none; }
 }
 
 /* Attachment upload */
@@ -3990,6 +4294,13 @@ const getImgSrc = (url: string) => {
   &.is-default {
     opacity: 0.85;
   }
+}
+
+.model-selector-default {
+  flex-shrink: 0;
+  font-size: var(--app-text-xs);
+  color: var(--td-text-color-placeholder);
+  font-weight: 400;
 }
 
 .model-dropdown-arrow {
