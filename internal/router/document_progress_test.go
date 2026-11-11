@@ -22,7 +22,7 @@ func TestDocumentProgressRequiresSystemAdmin(t *testing.T) {
 			ctx := context.WithValue(c.Request.Context(), types.SystemAdminContextKey, admin)
 			c.Request = c.Request.WithContext(ctx)
 		})
-		RegisterSystemAdminRoutes(r.Group("/api/v1"), &handler.SystemHandler{}, nil,
+		RegisterSystemAdminRoutes(r.Group("/api/v1"), &handler.SystemHandler{}, nil, nil,
 			&rbacGuards{cfg: &config.Config{}})
 		for _, tc := range []struct{ method, path string }{
 			{http.MethodGet, "/api/v1/system/admin/runtime/documents"},

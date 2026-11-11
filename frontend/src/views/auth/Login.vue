@@ -201,9 +201,9 @@
           <div class="form-content">
             <t-form ref="formRef" :data="formData" :rules="formRules" @submit="handleLogin" layout="vertical"
               label-align="top">
-              <t-form-item :label="$t('auth.email')" name="email">
-                <t-input v-model="formData.email" :placeholder="$t('auth.emailPlaceholder')" type="text"
-                  autocomplete="email" size="large" :disabled="loading" />
+              <t-form-item :label="$t('auth.usernameOrEmail')" name="email">
+                <t-input v-model="formData.email" :placeholder="$t('auth.usernameOrEmailPlaceholder')" type="text"
+                  autocomplete="username" size="large" :disabled="loading" />
               </t-form-item>
 
               <t-form-item :label="$t('auth.password')" name="password">
@@ -234,6 +234,12 @@
                 {{ oidcLoading ? $t('auth.redirectingToOIDC') : oidcLoginText }}
               </t-button>
             </t-form>
+
+            <!-- LDAP/AD 部署：目录登录复用上方同一个邮箱+密码表单（没有单独
+                 的按钮），所以这里只把要求讲清楚——邮箱必须填完整企业邮箱。 -->
+            <div v-if="ldapEnabled" class="ldap-hint">
+              {{ $t('auth.ldapLoginHint') }}
+            </div>
 
             <!-- Features list -->
             <div class="login-features">
@@ -414,6 +420,9 @@ const oidcLoading = ref(false)
 const isRegisterMode = ref(false)
 const showLanguageMenu = ref(false)
 const oidcEnabled = ref(false)
+// LDAP/AD 复用同一个邮箱+密码表单（没有单独按钮），所以这个标记只用来
+// 控制一条说明性提示的显隐。
+const ldapEnabled = ref(false)
 const oidcProviderName = ref('')
 // Wait for configuration before showing a registration entry.
 const registrationMode = ref('')
@@ -466,8 +475,7 @@ const registerData = reactive<{ [key: string]: any }>({
 // Login form validation rules
 const formRules = computed(() => ({
   email: [
-    { required: true, message: t('auth.emailRequired'), type: 'error' },
-    { email: true, message: t('auth.emailInvalid'), type: 'error' }
+    { required: true, message: t('auth.usernameOrEmailRequired'), type: 'error' }
   ],
   password: [
     { required: true, message: t('auth.passwordRequired'), type: 'error' },
@@ -616,9 +624,11 @@ const loadAuthConfig = async () => {
     const response = await getAuthConfig()
     registrationMode.value = response.success ? response.registration_mode : ''
     complexPasswordEnabled.value = response.complex_password_enabled
+    ldapEnabled.value = !!response.ldap_enabled
   } catch {
     registrationMode.value = ''
     complexPasswordEnabled.value = false
+    ldapEnabled.value = false
   }
 }
 
@@ -1405,6 +1415,18 @@ onMounted(async () => {
   border-radius: var(--app-radius-md);
   background: var(--td-success-color-light);
   color: var(--td-brand-color-active);
+  font-size: 12.5px;
+  line-height: 1.5;
+  font-family: var(--app-font-family);
+}
+
+/* LDAP/AD：没有独立按钮，用这条提示把「用完整企业邮箱」说清楚。 */
+.ldap-hint {
+  margin: 14px 0 0;
+  padding: 8px 12px;
+  border-radius: var(--app-radius-md);
+  background: var(--td-warning-color-light);
+  color: var(--td-text-color-primary);
   font-size: 12.5px;
   line-height: 1.5;
   font-family: var(--app-font-family);

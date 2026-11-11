@@ -243,5 +243,5 @@ func (h *AuthHandler) RegisterByInvite(c *gin.Context) {
 		}},
 		Token:        accessToken,
 		RefreshToken: refreshToken,
-	}))
+	}, h.crossTenantEnabled()))
 }

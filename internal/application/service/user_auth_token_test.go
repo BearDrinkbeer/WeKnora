@@ -413,6 +413,22 @@ func (s *stubUserRepoForAuth) SetUserActive(context.Context, string, string, boo
 	panic("unexpected SetUserActive call")
 }
 
+func (s *stubUserRepoForAuth) ListManagedUsers(context.Context, string, int, int) ([]*types.User, int64, error) {
+	return nil, 0, nil
+}
+
+func (s *stubUserRepoForAuth) ManagedUserStats(context.Context) (*types.ManagedUserStats, error) {
+	return nil, nil
+}
+
+func (s *stubUserRepoForAuth) SetManagedUserActive(context.Context, string, bool) (*types.User, error) {
+	return nil, nil
+}
+
+func (s *stubUserRepoForAuth) SoftDeleteManagedUser(context.Context, string) (*types.User, error) {
+	return nil, nil
+}
+
 func TestValidateTokenRejectsDisabledAccount(t *testing.T) {
 	tokenRepo := &stubAuthTokenRepo{tokens: map[string]*types.AuthToken{}}
 	svc := newAuthTestUserService(tokenRepo)

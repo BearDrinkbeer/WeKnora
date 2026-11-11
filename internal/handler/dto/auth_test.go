@@ -18,7 +18,7 @@ func TestAuthLoginResponse_ViewerOmitsActiveTenantSecrets(t *testing.T) {
 			TenantID: tenant.ID,
 			Role:     types.TenantRoleViewer,
 		}},
-	})
+	}, false)
 	body, err := json.Marshal(resp)
 	require.NoError(t, err)
 	s := string(body)
@@ -35,7 +35,7 @@ func TestAuthLoginResponse_OwnerOmitsLegacyTenantAPIKey(t *testing.T) {
 			TenantID: tenant.ID,
 			Role:     types.TenantRoleOwner,
 		}},
-	})
+	}, false)
 	body, err := json.Marshal(resp)
 	require.NoError(t, err)
 	s := string(body)
@@ -53,7 +53,7 @@ func TestAuthOIDCCallbackResponse_ViewerOmitsTenantSecrets(t *testing.T) {
 			TenantID: tenant.ID,
 			Role:     types.TenantRoleViewer,
 		}},
-	})
+	}, false)
 	body, err := json.Marshal(resp)
 	require.NoError(t, err)
 	assert.NotContains(t, string(body), "tenant-api-key-123")

@@ -306,6 +306,7 @@ func RegisterSystemAdminRoutes(
 	r *gin.RouterGroup,
 	handler *handler.SystemHandler,
 	auditLogHandler *handler.AuditLogHandler,
+	userManagementHandler *handler.UserManagementHandler,
 	g *rbacGuards,
 ) {
 	// Apply SystemAdmin() at the group level — every route below inherits
@@ -322,7 +323,6 @@ func RegisterSystemAdminRoutes(
 		adminRoutes.POST("/promote", handler.PromoteUserToSystemAdmin)
 		adminRoutes.POST("/revoke", handler.RevokeSystemAdmin)
 		adminRoutes.GET("/list", handler.ListSystemAdmins)
-		adminRoutes.GET("/users", handler.ListUsers)
 		adminRoutes.POST("/users/status", handler.SetUserStatus)
 		adminRoutes.POST("/users/reset-password", handler.ResetUserPassword)
 		adminRoutes.POST("/users/create", handler.CreateSystemUser)
@@ -330,6 +330,29 @@ func RegisterSystemAdminRoutes(
 		adminRoutes.POST("/api-keys", handler.CreatePlatformAPIKey)
 		adminRoutes.DELETE("/api-keys/:key_id", handler.DeletePlatformAPIKey)
 
+		// Settings → 系统管理 → 用户管理. All three tabs inherit the
+		// SystemAdmin guard from the group above. Registered only when the
+		// handler is wired (nil in partially-wired test fixtures).
+		if userManagementHandler != nil {
+			// 本地用户：列表 + 启停 + 删除。新建与重置密码复用上面的
+			// /users/create 和 /users/reset-password。
+			adminRoutes.GET("/users", userManagementHandler.ListUsers)
+			adminRoutes.POST("/users/:id/disable", userManagementHandler.DisableUser)
+			adminRoutes.POST("/users/:id/enable", userManagementHandler.EnableUser)
+			adminRoutes.DELETE("/users/:id", userManagementHandler.DeleteUser)
+
+			// 通用OIDC：DB 配置（env 变量降级为默认值），密钥只写不读。
+			adminRoutes.GET("/auth/oidc", userManagementHandler.GetOIDCProvider)
+			adminRoutes.PUT("/auth/oidc", userManagementHandler.UpdateOIDCProvider)
+			adminRoutes.POST("/auth/oidc/test", userManagementHandler.TestOIDCProvider)
+
+			// LDAP：连接配置 + 连通性/检索/绑定测试。
+			adminRoutes.GET("/auth/ldap", userManagementHandler.GetLDAPProvider)
+			adminRoutes.PUT("/auth/ldap", userManagementHandler.UpdateLDAPProvider)
+			adminRoutes.POST("/auth/ldap/test", userManagementHandler.TestLDAPProvider)
+		} else {
+			adminRoutes.GET("/users", handler.ListUsers)
+		}
 		adminRoutes.GET("/settings-summary", handler.ListSystemSettingSummaries)
 
 		// P1: platform-wide system settings (DB-backed runtime tunables).

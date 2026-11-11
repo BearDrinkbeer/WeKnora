@@ -24,7 +24,7 @@ func TestOIDCPKCEProofCookie(t *testing.T) {
 				}, nil
 			}
 			us := &stubOIDCStartUserService{getOIDCAuthorizationURL: buildAuthURL}
-			h := NewAuthHandler(&config.Config{}, us, nil, nil, nil)
+			h := NewAuthHandler(&config.Config{}, us, nil, nil, nil, nil)
 			gin.SetMode(gin.TestMode)
 			router := gin.New()
 			router.GET("/auth/oidc/start", h.OIDCStart)
@@ -67,7 +67,7 @@ func TestOIDCPKCECallbackRequiresProofAndConsumesCookies(t *testing.T) {
 	}
 	for _, provideProof := range []bool{false, true} {
 		us := &stubOIDCPKCECallback{}
-		h := NewAuthHandler(&config.Config{}, us, nil, nil, nil)
+		h := NewAuthHandler(&config.Config{}, us, nil, nil, nil, nil)
 		router := gin.New()
 		router.GET("/auth/oidc/callback", h.OIDCRedirectCallback)
 		req := httptest.NewRequest(http.MethodGet, "/auth/oidc/callback?code=code&state="+url.QueryEscape(state), nil)
