@@ -2754,7 +2754,7 @@ export default {
     askUser: '向使用者提問'
   },
   assistant: {
-    title: 'WeKnora 助手',
+    title: 'COWIN 助手',
     newConversation: '新對話',
     history: '歷史對話',
     untitledConversation: '未命名對話',
@@ -2768,10 +2768,10 @@ export default {
     },
     welcomeTitle: '有什麼可以幫你？',
     agentWelcomeDesc: '可以檢查這個智慧代理的設定、調整模型或查看它能檢索的知識庫。',
-    welcomeDesc: '我可以解答 WeKnora 的使用問題，整理知識與文件，幫你設定智慧代理、工具和自動化。',
+    welcomeDesc: '我可以解答 COWIN助手的使用問題，整理知識與文件，幫你設定智慧代理、工具和自動化。',
     help: {
       label: '助手說明',
-      title: 'WeKnora 助手能做什麼',
+      title: 'COWIN 助手能做什麼',
       identity: '助手以你的身份工作。它能看到和修改的範圍，與你在這個空間裡的角色一致，不會超出你的權限。',
       page: '打開後會附帶目前頁面，可以據此梳理內容、設定智慧代理和自動化，或代為填寫表單。它不會替你點擊按鈕或儲存。',
       access: '輸入框下方可以切換權限：唯讀、修改前確認、自動執行。刪除始終需要你確認。管理員限制的最高等級無法突破。',
@@ -3172,7 +3172,7 @@ export default {
       modelSetup: '我還需要設定哪些模型？',
       mcpSetup: '怎樣接入一個 MCP 服務？',
       releaseHighlights: "目前版本主要更新了哪些內容？",
-      gettingStarted: "第一次使用 WeKnora，應該先設定什麼？",
+      gettingStarted: "第一次使用 COWIN助手，應該先設定什麼？",
       workflow: "知識庫、智慧代理和自動化該怎麼搭配使用？",
       knowledgeOverview: "這些知識庫分別適合查哪些內容？",
       knowledgeType: "文件、FAQ 和 Wiki，我該怎麼選？",
@@ -6440,7 +6440,7 @@ export default {
     }
   },
   createChat: {
-    title: 'Hi，我是 WeKnora，讓你的知識觸手可及',
+    title: 'Hi，我是 COWIN助手，讓你的知識觸手可及',
     newSessionTitle: '新會話',
     openProject: '選擇專案',
     clearProject: '取消綁定',
@@ -9440,7 +9440,7 @@ export default {
         desc: '知識庫是一切的起點：上傳文件、網頁或 FAQ，WeKnora 會自動解析並建立索引。點擊這裡進入知識庫。'
       },
       welcome: {
-        title: '歡迎使用 WeKnora',
+        title: '歡迎使用 COWIN助手',
         desc: '只需幾步，帶你快速了解知識庫、對話與智慧代理的核心用法。點擊「下一步」開始。'
       }
     }

@@ -2754,7 +2754,7 @@ export default {
     askUser: '向用户提问'
   },
   assistant: {
-    title: 'WeKnora 助手',
+    title: 'COWIN 助手',
     newConversation: '新对话',
     history: '历史对话',
     untitledConversation: '未命名对话',
@@ -2768,10 +2768,10 @@ export default {
     },
     welcomeTitle: '有什么可以帮你？',
     agentWelcomeDesc: '可以检查这个智能体的配置、调整模型或查看它能检索的知识库。',
-    welcomeDesc: '我可以解答 WeKnora 的使用问题，整理知识与文档，帮你配置智能体、工具和自动化。',
+    welcomeDesc: '我可以解答 COWIN助手的使用问题，整理知识与文档，帮你配置智能体、工具和自动化。',
     help: {
       label: '助手说明',
-      title: 'WeKnora 助手能做什么',
+      title: 'COWIN 助手能做什么',
       identity: '助手以你的身份工作。它能看到和修改的范围，与你在这个空间里的角色一致，不会超出你的权限。',
       page: '打开后会附带当前页面，可以据此梳理内容、配置智能体和自动化，或代为填写表单。它不会替你点击按钮或保存。',
       access: '输入框下方可以切换权限：只读、修改前确认、自动执行。删除始终需要你确认。管理员限制的最高等级无法突破。',
@@ -3172,7 +3172,7 @@ export default {
       modelSetup: '我还需要配置哪些模型？',
       mcpSetup: '怎样接入一个 MCP 服务？',
       releaseHighlights: "当前版本主要更新了哪些内容？",
-      gettingStarted: "第一次使用 WeKnora，应该先配置什么？",
+      gettingStarted: "第一次使用 COWIN助手，应该先配置什么？",
       workflow: "知识库、智能体和自动化该怎么配合使用？",
       knowledgeOverview: "这些知识库分别适合查哪些内容？",
       knowledgeType: "文档、FAQ 和 Wiki，我该怎么选？",
@@ -6440,7 +6440,7 @@ export default {
     }
   },
   createChat: {
-    title: 'Hi，我是 WeKnora，让你的知识触手可及',
+    title: 'Hi，我是 COWIN助手，让你的知识触手可及',
     newSessionTitle: '新会话',
     openProject: '选择项目',
     clearProject: '取消绑定',
@@ -9440,7 +9440,7 @@ export default {
         desc: '知识库是一切的起点：上传文档、网页或 FAQ，WeKnora 会自动解析并建立索引。点击这里进入知识库。'
       },
       welcome: {
-        title: '欢迎使用 WeKnora',
+        title: '欢迎使用 COWIN助手',
         desc: '只需几步，带你快速了解知识库、对话与智能体的核心用法。点击「下一步」开始。'
       }
     }

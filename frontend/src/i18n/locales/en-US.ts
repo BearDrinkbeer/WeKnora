@@ -681,7 +681,7 @@ export default {
         desc: 'Ask about WeKnora versions, features and setup. Using the current page as context, the assistant can create agents, schedule tasks and organize knowledge on your behalf, within your permissions.'
       },
       welcome: {
-        title: 'Welcome to WeKnora',
+        title: 'Welcome to the COWIN assistant',
         desc: 'A few quick steps to get you familiar with knowledge bases, chat and agents. Click "Next" to begin.'
       },
       knowledge: {
@@ -3659,7 +3659,7 @@ export default {
     }
   },
   createChat: {
-    title: 'Hi, I am WeKnora — your knowledge, within reach',
+    title: 'Hi, I am the COWIN assistant — your knowledge, within reach',
     newSessionTitle: 'New Session',
     openProject: 'Select project',
     clearProject: 'Clear',
@@ -6818,7 +6818,7 @@ export default {
       videoNotSupported: 'Your browser does not support video playback'
     },
     assistant: {
-      title: 'WeKnora Assistant',
+      title: 'COWIN Assistant',
       newConversation: 'New conversation',
       history: 'Conversation history',
       untitledConversation: 'Untitled conversation',
@@ -6832,10 +6832,10 @@ export default {
       },
       welcomeTitle: 'How can I help?',
       agentWelcomeDesc: 'Check this agent’s configuration, change its model or see which knowledge bases it can search.',
-      welcomeDesc: 'I can answer questions about WeKnora, organize knowledge and documents, and help set up agents, tools and automations.',
+      welcomeDesc: 'I can answer questions about the COWIN assistant, organize knowledge and documents, and help set up agents, tools and automations.',
       help: {
         label: 'About the assistant',
-        title: 'What the WeKnora assistant can do',
+        title: 'What the COWIN assistant can do',
         identity: 'The assistant works as you. It can see and change only what your role in this workspace allows.',
         page: 'It keeps the current page attached, so it can summarize what is on screen, set up agents and automations, or fill in forms. It will not click buttons or save for you.',
         access: 'Under the input you can switch access: read-only, confirm before changes, or run recoverable changes automatically. Deletes always need your confirmation, and an admin ceiling cannot be exceeded.',
@@ -7236,7 +7236,7 @@ export default {
       modelSetup: 'Which models do I still need to set up?',
       mcpSetup: 'How do I connect an MCP service?',
       releaseHighlights: "What are the main changes in the current version?",
-      gettingStarted: "What should I set up first in WeKnora?",
+      gettingStarted: "What should I set up first in the COWIN assistant?",
       workflow: "How do knowledge bases, agents and automations work together?",
       knowledgeOverview: "What can I find in each of these knowledge bases?",
       knowledgeType: "When should I use documents, FAQ or Wiki?",
